@@ -1,9 +1,8 @@
 #include <LiquidCrystal_I2C.h>
 #include <Keypad.h>
-#include <Wire.h> 
 
-byte pinosLinhas[]  = {10,9,8,7}; // pinos para linhas do teclado
-byte pinosColunas[] = {4,2,3};    // pinos para colunas do teclado
+byte pinosLinhas[]  = {8,2,3,5}; // pinos para linhas do teclado
+byte pinosColunas[] = {7,9,4};    // pinos para colunas do teclado
 char teclas[4][3] = {
                      {'1','2','3'},
                      {'4','5','6'},
@@ -14,8 +13,12 @@ int senha[4];
 int tentativa[4];
 int tempo[4];
 int segundos;
+int segundosrestantes;
 int key=-1;
-char var;                  
+int buzzer = 6;
+char var;
+int chances = 0;  
+             
                      
 //função biblioteca para teclado
 Keypad keypad = Keypad( makeKeymap(teclas), pinosLinhas, pinosColunas, 4, 3);  
@@ -39,27 +42,20 @@ void setup() {
   delay(3000);
   lcd.clear();
   lcd.setCursor(0, 0);  
-  lcd.print("Rangers");
-  lcd.setCursor(0, 1);
-  lcd.print("Airsoft");
+  lcd.print("Rangers Airsoft");
+  //lcd.setCursor(0, 1);
+  //lcd.print("");
   delay(3000);
   keypad.setHoldTime(50);
   keypad.setDebounceTime(50);
+  //keypad.addEventListener(keypadEvent);
   lcd.clear();
-  setSenha();
-  lcd.clear();
-  displaySenha();
-  lcd.clear();
-  compSenha();
-  lcd.clear();
-  setTempo();
-  lcd.clear();
-  segundos = calcTempo();
-  cronTempo(segundos);
+  pinMode(buzzer, OUTPUT);   
+  
 }
 
 void loop() {
-  
+   menu();
   }
 
 void setSenha(){
@@ -88,8 +84,26 @@ void displaySenha(){
   delay(1000);
 }
 
+void iniciar(){
+  while(1){
+    if(chances !=0){
+    cronTempo(segundos);
+    compSenha();
+    }
+    else{
+    cronTempo(segundosrestantes);
+    compSenha();
+    }
+   }
+  }
+
 void compSenha(){
   int i,j;
+  lcd.clear();
+  lcd.setCursor(0, 0);  
+  lcd.print("DESARMAR");
+  delay(1000);
+  lcd.clear();
   lcd.setCursor(0, 0);  
   lcd.print("Qual a senha?");
   for(i=0;i<4;i++){
@@ -101,20 +115,42 @@ void compSenha(){
     lcd.print(tentativa[i]);
   }
   if(senha[0] == tentativa[0] && senha[1] == tentativa[1] && senha[2] == tentativa[2] && senha[3] == tentativa[3]){
-  lcd.setCursor(0, 0);  
-  lcd.print("Senha correta!");
-  lcd.setCursor(0, 1);
-  lcd.print("Bomba desarmada");
-  delay(5000); 
+    lcd.setCursor(0, 0);  
+    lcd.print("Senha correta!");
+    delay(2000);
+    lcd.clear();
+    bombadesarmada(chances,segundos);
   }
   else{
-  lcd.setCursor(0, 0);  
-  lcd.print("Senha incorreta!");
-  lcd.setCursor(0, 1);
-  lcd.print("Bomba explodida"); 
-  delay(5000);
+    lcd.setCursor(0, 0);  
+    lcd.print("Senha incorreta!");
+    chances++;
+    delay(2000);
+    bombaexplodiu(chances, segundos);
     }
 }
+
+void bombaexplodiu(int chances, int segundos){
+      if(chances == 3 || segundos == 0){
+        while(1){
+          lcd.setCursor(0, 0);
+          lcd.print("Bomba explodida");
+          digitalWrite(buzzer, HIGH);  
+          delay(5000);
+          lcd.clear();
+      }
+    }
+  }
+
+void bombadesarmada(int chances, int segundos){
+    while(1){
+      lcd.setCursor(0, 0);
+      lcd.print("Bomba desarmada");
+      delay(5000);
+      lcd.clear();
+    }
+  }
+  
 
 void setTempo(){
   int i,j;
@@ -148,21 +184,38 @@ int cronTempo(int segundos){
   lcd.setCursor(0, 0);  
   lcd.print("Tempo restante:");
   while(segundos !=0){
-    segundos--; 
-    delay(1000);
+    segundos--;
+    segundosrestantes = segundos;
+    delay(500);
+    digitalWrite(buzzer, HIGH);
+    if(chances == 1){
+      lcd.setCursor(0, 1);  
+      lcd.print("#");
+      }
+    if(chances == 2){
+      lcd.setCursor(0, 1);  
+      lcd.print("##");}
+      
+    if(chances == 3){
+      lcd.setCursor(0, 1);  
+      lcd.print("###");}
+    
     if(segundos>=1000){
       lcd.clear();
       lcd.setCursor(0, 0);  
       lcd.print("Tempo restante:");
       lcd.setCursor(12, 1);  
       lcd.print(segundos);
+
       }
+      
     if(segundos<1000){
       lcd.clear();
       lcd.setCursor(0, 0);  
       lcd.print("Tempo restante:");
       lcd.setCursor(13, 1);  
       lcd.print(segundos);
+
       }
       
     if(segundos<100){
@@ -171,6 +224,7 @@ int cronTempo(int segundos){
       lcd.print("Tempo restante:");
       lcd.setCursor(14, 1);  
       lcd.print(segundos);
+
       }
       
     if(segundos<10){
@@ -179,57 +233,48 @@ int cronTempo(int segundos){
       lcd.print("Tempo restante:");
       lcd.setCursor(15, 1);  
       lcd.print(segundos);
+
       }
+      
+    delay(150);
+    digitalWrite(buzzer, LOW);
+    delay(350);
   }
+  segundos = 2;
 }
 
 int menu(){
-  while(1){
-    var = keypad.waitForKey();
-    if (var){//
-      switch (var) {
-      case '1': 
-
-        break;
-      case '2': 
-        
-        break;
-      case '3': 
-
-        break;
-      case '4': 
-
-        break;
-      case '5': 
-
-        break;
-      case '6': 
-
-      case '7': 
-
-        break;
-      case '8': 
-
-        break;
-      case '9': 
-
-        break;
-      case '0': 
-
-        break;
-      case '*': 
-
-        break;
-      case '#': 
-
-        break;
-
-      }
-
-    }
+  lcd.clear();
+  lcd.setCursor(0, 0);  
+  lcd.print("Menu");
+  lcd.setCursor(0, 1);  
+  lcd.print("Aperte o botao");
+  lcd.clear();
+  delay(1000);
+  lcd.setCursor(0, 0);  
+  lcd.print("1-Configurar");
+  lcd.setCursor(0, 1);  
+  lcd.print("2-Iniciar");
+  var = keypad.waitForKey();
+  lcd.clear();
+  if (var == '1'){// 
+      setSenha();
+      lcd.clear();
+      setTempo();
+      segundos = calcTempo();
+      lcd.clear();
   }
+  else if (var == '2'){
+    iniciar();
+    lcd.clear();
+  }
+  else{
+    menu();
+    }  
+     
 }
 
+    
 int tradutorkeypad(){
   while(1){
     var = keypad.waitForKey();
@@ -265,7 +310,7 @@ int tradutorkeypad(){
         return 0;
         break;
       default:
-        return 11;
+        return 0;
         break;
       }
 
