@@ -1,5 +1,6 @@
 #include <LiquidCrystal_I2C.h>
 #include <Keypad.h>
+#include <Wire.h> 
 
 byte pinosLinhas[]  = {8,2,3,5}; // pinos para linhas do teclado
 byte pinosColunas[] = {7,9,4};    // pinos para colunas do teclado
@@ -13,28 +14,32 @@ int senha[4];
 int tentativa[4];
 int tempo[4];
 int segundos;
-int segundosrestantes;
-int key=-1;
-int buzzer = 6;
-char var;
-int chances = 0;  
-             
-                     
-//função biblioteca para teclado
+
+// Definição do Buzzer no pino 6
+const int pinoBuzzer = 6;
+
+// Variáveis para controle não-bloqueante
+unsigned long tempoAnterior = 0;
+int indiceTentativa = 0;
+bool bombaAtiva = false;
+bool jogoFinalizado = false;
+
+// função biblioteca para teclado
 Keypad keypad = Keypad( makeKeymap(teclas), pinosLinhas, pinosColunas, 4, 3);  
 
 // cria uma instância do LCD
 LiquidCrystal_I2C lcd(0x27, 16, 2);
 
 void setup() {
+  // Configura o pino do buzzer como saída
+  pinMode(pinoBuzzer, OUTPUT);
+  
   lcd.begin(16, 2);
-  //inicializa serial
   Serial.begin(9600);
-  // iniciailiza o LCD com as dimensões corretas
   lcd.init();
-  // aciona a luz de fundo (backlight)
   lcd.backlight();
-  //introdução
+  
+  // Introdução
   lcd.setCursor(0, 0);  
   lcd.print("UTOPIA");
   lcd.setCursor(0, 1);
@@ -42,29 +47,127 @@ void setup() {
   delay(3000);
   lcd.clear();
   lcd.setCursor(0, 0);  
-  lcd.print("Rangers Airsoft");
-  //lcd.setCursor(0, 1);
-  //lcd.print("");
+  lcd.print("Rangers");
+  lcd.setCursor(0, 1);
+  lcd.print("Airsoft");
   delay(3000);
+  
   keypad.setHoldTime(50);
   keypad.setDebounceTime(50);
-  //keypad.addEventListener(keypadEvent);
-  lcd.clear();
-  pinMode(buzzer, OUTPUT);   
   
+  // Fase de Configuração
+  lcd.clear();
+  setSenha();
+  
+  lcd.clear();
+  setTempo();
+  
+  segundos = calcTempo();
+  
+  // Prepara a tela para o jogo começar
+  lcd.clear();
+  lcd.setCursor(0, 0);  
+  lcd.print("Tempo:");
+  atualizarDisplayTempo();
+  lcd.setCursor(0, 1);
+  lcd.print("Senha: ");
+  
+  // Inicia o jogo
+  bombaAtiva = true;
+  tempoAnterior = millis();
 }
 
 void loop() {
-   menu();
+  if (bombaAtiva && !jogoFinalizado) {
+    unsigned long tempoAtual = millis();
+
+    // 1. LÓGICA DO CRONÔMETRO (Não-bloqueante)
+    if (tempoAtual - tempoAnterior >= 1000) {
+      tempoAnterior = tempoAtual; 
+      segundos--;
+      atualizarDisplayTempo();
+
+      // Apita a cada segundo que passa (frequência de 1000Hz por 100ms)
+      tone(pinoBuzzer, 1000, 100);
+
+      // Checa se o tempo acabou
+      if (segundos <= 0) {
+        bombaAtiva = false;
+        jogoFinalizado = true;
+        lcd.clear();
+        lcd.setCursor(0, 0);  
+        lcd.print("TERRORISTS WIN!");
+        lcd.setCursor(0, 1);
+        lcd.print("Bomba explodida"); 
+        
+        // --- ROTINA DE EXPLOSÃO ---
+        // Apita a cada 50ms por 2 minutos (120.000 ms)
+        // 50ms ligado + 50ms desligado = 100ms por ciclo
+        // 1200 ciclos * 100ms = 120.000ms = 2 minutos
+        for(int i = 0; i < 1200; i++) {
+          tone(pinoBuzzer, 1500); // Liga o buzzer
+          delay(50);
+          noTone(pinoBuzzer);     // Desliga o buzzer
+          delay(50);
+        }
+      }
+    }
+
+    // 2. LÓGICA DE DESARMAR A BOMBA (Não-bloqueante)
+    char tecla = keypad.getKey(); 
+    
+    if (tecla && tecla != '*' && tecla != '#') { 
+      tentativa[indiceTentativa] = tecla - '0';  
+      
+      lcd.setCursor(7 + indiceTentativa, 1); 
+      lcd.print(tentativa[indiceTentativa]);
+      
+      indiceTentativa++;
+
+      // Verifica a senha
+      if (indiceTentativa == 4) {
+        if (verificarSenha()) {
+          // Senha correta
+          bombaAtiva = false;
+          jogoFinalizado = true;
+          lcd.clear();
+          lcd.setCursor(0, 0);  
+          lcd.print("CT WIN!");
+          lcd.setCursor(0, 1);
+          lcd.print("Bomba desarmada");
+        } else {
+          // Senha incorreta: limpa a tela para tentar de novo
+          lcd.setCursor(7, 1);
+          lcd.print("    "); 
+          indiceTentativa = 0;
+        }
+      }
+    }
   }
+}
+
+// ================= FUNÇÕES AUXILIARES =================
+
+bool verificarSenha() {
+  if(senha[0] == tentativa[0] && senha[1] == tentativa[1] && 
+     senha[2] == tentativa[2] && senha[3] == tentativa[3]) {
+    return true;
+  }
+  return false;
+}
+
+void atualizarDisplayTempo() {
+  lcd.setCursor(7, 0);
+  lcd.print("         "); 
+  lcd.setCursor(7, 0);
+  lcd.print(segundos);
+  lcd.print("s");
+}
 
 void setSenha(){
-  int i,j;
+  int i;
   lcd.setCursor(0, 0);  
   lcd.print("Defina a Senha");
-  for(i=0;i<4;i++){
-    senha[i] = 0;
-  }  
   for(i=0;i<4;i++){
     senha[i] = tradutorkeypad();
     lcd.setCursor(i, 1);  
@@ -73,248 +176,41 @@ void setSenha(){
   delay(1000);
 }
 
-void displaySenha(){
-  int i,j;
-  lcd.setCursor(0, 0);  
-  lcd.print("Resposta");
-  for(i=0;i<4;i++){
-    lcd.setCursor(i, 1);  
-    lcd.print(senha[i]);
-  }
-  delay(1000);
-}
-
-void iniciar(){
-  while(1){
-    if(chances !=0){
-    cronTempo(segundos);
-    compSenha();
-    }
-    else{
-    cronTempo(segundosrestantes);
-    compSenha();
-    }
-   }
-  }
-
-void compSenha(){
-  int i,j;
-  lcd.clear();
-  lcd.setCursor(0, 0);  
-  lcd.print("DESARMAR");
-  delay(1000);
-  lcd.clear();
-  lcd.setCursor(0, 0);  
-  lcd.print("Qual a senha?");
-  for(i=0;i<4;i++){
-    tentativa[i] = 0;
-  }  
-  for(i=0;i<4;i++){
-    tentativa[i] = tradutorkeypad();
-    lcd.setCursor(i, 1);  
-    lcd.print(tentativa[i]);
-  }
-  if(senha[0] == tentativa[0] && senha[1] == tentativa[1] && senha[2] == tentativa[2] && senha[3] == tentativa[3]){
-    lcd.setCursor(0, 0);  
-    lcd.print("Senha correta!");
-    delay(2000);
-    lcd.clear();
-    bombadesarmada(chances,segundos);
-  }
-  else{
-    lcd.setCursor(0, 0);  
-    lcd.print("Senha incorreta!");
-    chances++;
-    delay(2000);
-    bombaexplodiu(chances, segundos);
-    }
-}
-
-void bombaexplodiu(int chances, int segundos){
-      if(chances == 3 || segundos == 0){
-        while(1){
-          lcd.setCursor(0, 0);
-          lcd.print("Bomba explodida");
-          digitalWrite(buzzer, HIGH);  
-          delay(5000);
-          lcd.clear();
-      }
-    }
-  }
-
-void bombadesarmada(int chances, int segundos){
-    while(1){
-      lcd.setCursor(0, 0);
-      lcd.print("Bomba desarmada");
-      delay(5000);
-      lcd.clear();
-    }
-  }
-  
-
 void setTempo(){
-  int i,j;
+  int i;
   lcd.setCursor(0, 0);  
-  lcd.print("Quanto tempo de");
-  lcd.setCursor(0, 1);  
-  lcd.print("partida?");
+  lcd.print("Tempo (MM:SS)");
   for(i=0;i<4;i++){
     tempo[i] = 0;
   } 
-    lcd.setCursor(13, 1);  
-    lcd.print(":"); 
-  for(i=0;i<2;i++){
+  lcd.setCursor(2, 1);  
+  lcd.print(":"); 
+  
+  for(i=0;i<2;i++){ // Minutos
     tempo[i] = tradutorkeypad();
-    lcd.setCursor(i+11, 1);  
+    lcd.setCursor(i, 1);  
     lcd.print(tempo[i]);
   }
-  for(i=2;i<4;i++){
+  for(i=2;i<4;i++){ // Segundos
     tempo[i] = tradutorkeypad();
-    lcd.setCursor(i+12, 1);  
+    lcd.setCursor(i+1, 1);  
     lcd.print(tempo[i]);
   }
   delay(1000);
 }
 
 int calcTempo(){
-  return(10*tempo[0]*60+tempo[1]*60+10*tempo[2]+tempo[3]);
+  int minutos = (tempo[0] * 10) + tempo[1];
+  int segs = (tempo[2] * 10) + tempo[3];
+  return (minutos * 60) + segs;
 }
 
-int cronTempo(int segundos){
-  lcd.setCursor(0, 0);  
-  lcd.print("Tempo restante:");
-  while(segundos !=0){
-    segundos--;
-    segundosrestantes = segundos;
-    delay(500);
-    digitalWrite(buzzer, HIGH);
-    if(chances == 1){
-      lcd.setCursor(0, 1);  
-      lcd.print("#");
-      }
-    if(chances == 2){
-      lcd.setCursor(0, 1);  
-      lcd.print("##");}
-      
-    if(chances == 3){
-      lcd.setCursor(0, 1);  
-      lcd.print("###");}
-    
-    if(segundos>=1000){
-      lcd.clear();
-      lcd.setCursor(0, 0);  
-      lcd.print("Tempo restante:");
-      lcd.setCursor(12, 1);  
-      lcd.print(segundos);
-
-      }
-      
-    if(segundos<1000){
-      lcd.clear();
-      lcd.setCursor(0, 0);  
-      lcd.print("Tempo restante:");
-      lcd.setCursor(13, 1);  
-      lcd.print(segundos);
-
-      }
-      
-    if(segundos<100){
-      lcd.clear();
-      lcd.setCursor(0, 0);  
-      lcd.print("Tempo restante:");
-      lcd.setCursor(14, 1);  
-      lcd.print(segundos);
-
-      }
-      
-    if(segundos<10){
-      lcd.clear();
-      lcd.setCursor(0, 0);  
-      lcd.print("Tempo restante:");
-      lcd.setCursor(15, 1);  
-      lcd.print(segundos);
-
-      }
-      
-    delay(150);
-    digitalWrite(buzzer, LOW);
-    delay(350);
-  }
-  segundos = 2;
-}
-
-int menu(){
-  lcd.clear();
-  lcd.setCursor(0, 0);  
-  lcd.print("Menu");
-  lcd.setCursor(0, 1);  
-  lcd.print("Aperte o botao");
-  lcd.clear();
-  delay(1000);
-  lcd.setCursor(0, 0);  
-  lcd.print("1-Configurar");
-  lcd.setCursor(0, 1);  
-  lcd.print("2-Iniciar");
-  var = keypad.waitForKey();
-  lcd.clear();
-  if (var == '1'){// 
-      setSenha();
-      lcd.clear();
-      setTempo();
-      segundos = calcTempo();
-      lcd.clear();
-  }
-  else if (var == '2'){
-    iniciar();
-    lcd.clear();
-  }
-  else{
-    menu();
-    }  
-     
-}
-
-    
 int tradutorkeypad(){
+  char var;
   while(1){
     var = keypad.waitForKey();
-    if (var){//
-      switch (var) {
-      case '1': 
-        return 1;
-        break;
-      case '2': 
-        return 2;
-        break;
-      case '3': 
-        return 3;
-        break;
-      case '4': 
-        return 4;
-        break;
-      case '5': 
-        return 5;
-        break;
-      case '6': 
-        return 6;
-      case '7': 
-        return 7;
-        break;
-      case '8': 
-        return 8;
-        break;
-      case '9': 
-        return 9;
-        break;
-      case '0': 
-        return 0;
-        break;
-      default:
-        return 0;
-        break;
-      }
-
+    if (var >= '0' && var <= '9') {
+      return var - '0'; 
     }
-    return 11;
   }
 }
